@@ -3,14 +3,14 @@ import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getFirestore } from "firebase/firestore";
 const firebaseConfig = {
-  apiKey: "AIzaSyCZRYFyoIoCSYCL1rZZI8hmgtkFQLs5pCk",
-  authDomain: "samak-15-2-ar.firebaseapp.com",
-  databaseURL: "https://samak-15-2-ar-default-rtdb.firebaseio.com",
-  projectId: "samak-15-2-ar",
-  storageBucket: "samak-15-2-ar.firebasestorage.app",
-  messagingSenderId: "559287903261",
-  appId: "1:559287903261:web:f9e794e60068f15ada12f4",
-  measurementId: "G-SS5KTL6JDY"
+  apiKey: "AIzaSyCerXqJkAvH4JkXkD0Ut09TZyrHCe2kJHs",
+  authDomain: "swiftmove-l.firebaseapp.com",
+  databaseURL: "https://swiftmove-l-default-rtdb.firebaseio.com",
+  projectId: "swiftmove-l",
+  storageBucket: "swiftmove-l.firebasestorage.app",
+  messagingSenderId: "742722534350",
+  appId: "1:742722534350:web:b0c756c2d8a62d592dc99f",
+  measurementId: "G-SLYG76EH08"
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
