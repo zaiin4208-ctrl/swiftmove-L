@@ -1,0 +1,15 @@
+12:50:26 AM: 
+12:50:26 AM: ./lib/generate-pdf.ts:794:296
+12:50:26 AM: Type error: This comparison appears to be unintentional because the types '"pending" | "waiting" | "approved_with_otp" | "approved_with_pin" | "rejected" | "message"' and '"approved"' have no overlap.
+12:50:26 AM:   792 |           ${cardType ? `<tr><td style="width:34%;background:#F8FAFC;color:#334155;font-size:11px;font-weight:700;border:1px solid #D1D5DB;padding:7px 10px;white-space:nowrap;">نوع البطاقة</td><td style="color:#0F172A;font-size:11px;font-weight:700;border:1px solid #D1D5DB;padding:7px 10px;">${escapeHtml(cardType)}</td></tr>` : ""}
+12:50:26 AM:   793 |           ${bankName ? `<tr style="background:#F8FAFC;"><td style="width:34%;background:#F8FAFC;color:#334155;font-size:11px;font-weight:700;border:1px solid #D1D5DB;padding:7px 10px;white-space:nowrap;">البنك</td><td style="color:#0F172A;font-size:11px;font-weight:700;border:1px solid #D1D5DB;padding:7px 10px;">${escapeHtml(bankName)}${bankCountry ? ` (${escapeHtml(bankCountry)})` : ""}</td></tr>` : ""}
+12:50:26 AM: > 794 |           ${visitor.cardStatus ? `<tr><td style="width:34%;background:#F8FAFC;color:#334155;font-size:11px;font-weight:700;border:1px solid #D1D5DB;padding:7px 10px;white-space:nowrap;">حالة البطاقة</td><td style="font-size:11px;font-weight:700;border:1px solid #D1D5DB;padding:7px 10px;color:${visitor.cardStatus === "approved" ? "#16a34a" : visitor.cardStatus === "rejected" ? "#dc2626" : "#64748B"};">${escapeHtml(statusLabel(visitor.cardStatus))}</td></tr>` : ""}
+12:50:26 AM:       |                                                                                                                                                                                                                                                                                                        ^
+12:50:26 AM:   795 |         </table>
+12:50:26 AM:   796 |       </div>
+12:50:26 AM:   797 |
+12:50:26 AM: Next.js build worker exited with code: 1 and signal: null
+12:50:26 AM: ​
+12:50:26 AM: "build.command" failed                                        
+12:50:26 AM: ────────────────────────────────────────────────────────────────
+12:50:26 AM: ​

@@ -1,0 +1,36 @@
+{
+  "name": "emad-becare-dash",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 5000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@google-analytics/data": "^5.2.1",
+    "autoprefixer": "^10.4.27",
+    "date-fns": "^4.1.0",
+    "firebase": "^12.16.0",
+    "html2pdf.js": "^0.14.0",
+    "lucide-react": "^0.555.0",
+    "next": "^15.5.14",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "sonner": "^2.0.7",
+    "tailwindcss": "^3.4.19",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.12",
+    "@types/node": "^20.19.37",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.1",
+    "firebase-admin": "^13.7.0",
+    "typescript": "^5.9.3"
+  }
+}
