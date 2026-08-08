@@ -1,8 +1,8 @@
 "use client";
 
 import type { InsuranceApplication } from "@/lib/firestore-types";
-import { useState } from "react";
-import { updateApplication } from "@/lib/firebase-services";
+import { useState, useEffect, useRef } from "react";
+import { updateApplication, subscribeToChatMessages, sendAgentMessage, markChatRead, type ChatMsg } from "@/lib/firebase-services";
 import { DataBubble } from "./data-bubble";
 import {
   convertHistoryToBubbles,
@@ -34,6 +34,15 @@ export function VisitorDetails({ visitor, onBack }: VisitorDetailsProps) {
   const [isNavigating, setIsNavigating] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [nafadCode, setNafadCode] = useState("");
+
+  // ── Chat state ────────────────────────────────────────────────────────────
+  const [chatMessages, setChatMessages]   = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput]         = useState("");
+  const [chatOpen, setChatOpen]           = useState(false);
+  const [chatUnread, setChatUnread]       = useState(0);
+  const [chatSending, setChatSending]     = useState(false);
+  const chatBottomRef                     = useRef<HTMLDivElement>(null);
+  const prevMsgCount                      = useRef(0);
   const [cardsLayout, setCardsLayout] = useState<"vertical" | "horizontal">(
     "vertical"
   );
@@ -65,6 +74,43 @@ export function VisitorDetails({ visitor, onBack }: VisitorDetailsProps) {
       </div>
     );
   }
+
+  // ── Chat subscription ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!visitor?.id) return;
+    const unsub = subscribeToChatMessages(visitor.id, (msgs) => {
+      setChatMessages(msgs);
+      const userMsgs = msgs.filter((m) => m.from === "user");
+      if (userMsgs.length > prevMsgCount.current) {
+        const newCount = userMsgs.length - prevMsgCount.current;
+        if (!chatOpen) setChatUnread((u) => u + newCount);
+      }
+      prevMsgCount.current = userMsgs.length;
+    });
+    return () => unsub();
+  }, [visitor?.id]);
+
+  useEffect(() => {
+    if (chatOpen && chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: "smooth" });
+      if (visitor?.id) markChatRead(visitor.id).catch(() => {});
+      setChatUnread(0);
+    }
+  }, [chatMessages, chatOpen]);
+
+  const handleSendAgentMsg = async () => {
+    if (!chatInput.trim() || !visitor?.id || chatSending) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    setChatSending(true);
+    try {
+      await sendAgentMessage(visitor.id, text);
+    } catch (e) {
+      console.error("Chat send error", e);
+    } finally {
+      setChatSending(false);
+    }
+  };
 
   // Navigation handler
   const handleNavigate = async (destination: string) => {
@@ -1224,6 +1270,99 @@ export function VisitorDetails({ visitor, onBack }: VisitorDetailsProps) {
                     layout="vertical"
                   />
                 ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Live Chat Panel ──────────────────────────────────────────────── */}
+      <div className="border-t border-gray-200 bg-white shrink-0">
+        {/* Toggle bar */}
+        <button
+          onClick={() => { setChatOpen((o) => !o); setChatUnread(0); }}
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <span>💬</span>
+            <span>محادثة العميل المباشرة</span>
+            {chatMessages.length > 0 && (
+              <span className="text-xs text-gray-400">
+                ({chatMessages.length} رسالة)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {chatUnread > 0 && (
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white">
+                {chatUnread}
+              </span>
+            )}
+            <span className="text-gray-400 text-xs">{chatOpen ? "▲" : "▼"}</span>
+          </div>
+        </button>
+
+        {/* Chat body */}
+        {chatOpen && (
+          <div className="flex flex-col" style={{ height: "320px" }}>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
+              {chatMessages.length === 0 ? (
+                <p className="text-center text-xs text-gray-400 pt-8">
+                  لا توجد رسائل بعد. ستظهر رسائل العميل هنا فوراً.
+                </p>
+              ) : (
+                chatMessages.map((msg) => (
+                  <div
+                    key={msg.key}
+                    className={`flex ${msg.from === "agent" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div className="max-w-[75%]">
+                      <div
+                        className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-line ${
+                          msg.from === "agent"
+                            ? "bg-blue-600 text-white rounded-br-sm"
+                            : "bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm"
+                        }`}
+                      >
+                        {msg.text}
+                      </div>
+                      <div className={`text-[10px] text-gray-400 mt-0.5 ${msg.from === "agent" ? "text-right" : "text-left"}`}>
+                        {msg.from === "agent" ? "أنت" : "العميل"} ·{" "}
+                        {new Date(msg.timestamp).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+
+            {/* Input */}
+            <div className="border-t border-gray-200 px-3 py-2 flex items-center gap-2 bg-white shrink-0">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendAgentMsg(); } }}
+                placeholder="اكتب ردك هنا..."
+                className="flex-1 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                dir="rtl"
+              />
+              <button
+                onClick={handleSendAgentMsg}
+                disabled={!chatInput.trim() || chatSending}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-all"
+              >
+                {chatSending ? (
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
         )}

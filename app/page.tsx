@@ -6,6 +6,7 @@ import {
   updateApplication,
   deleteMultipleApplications,
   subscribeToPresence,
+  subscribeToAllChatMeta,
   type PresenceRecord,
 } from "@/lib/firebase-services";
 import { generateAllCardsPdf } from "@/lib/generate-pdf";
@@ -164,6 +165,29 @@ export default function Dashboard() {
       unsubscribePresence();
       clearInterval(tickTimer);
     };
+  }, []);
+
+  // Subscribe to chat metas — show notification when any visitor sends a message
+  useEffect(() => {
+    const seenUnread = new Set<string>();
+    const unsub = subscribeToAllChatMeta((metas) => {
+      for (const [visitorId, meta] of Object.entries(metas)) {
+        if (meta?.unread && !seenUnread.has(`${visitorId}-${meta.lastMessageAt}`)) {
+          seenUnread.add(`${visitorId}-${meta.lastMessageAt}`);
+          toast.success(`💬 رسالة جديدة من زائر`, {
+            id: `chat-${visitorId}`,
+            description: meta.lastMessage ? `"${String(meta.lastMessage).slice(0, 60)}"` : undefined,
+          });
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("رسالة جديدة في الشات", {
+              body: meta.lastMessage ? String(meta.lastMessage).slice(0, 80) : "رسالة جديدة",
+              tag: `chat-${visitorId}`,
+            });
+          }
+        }
+      }
+    });
+    return () => unsub();
   }, []);
 
   // Subscribe to Firebase

@@ -190,3 +190,76 @@ export const subscribeToPresence = (
   });
   return unsubscribe;
 };
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Chat — RTDB path: chats/{visitorId}/messages/{pushKey}
+// Used for real-time visitor ↔ dashboard messaging.
+// ──────────────────────────────────────────────────────────────────────────────
+import { push, set } from "firebase/database";
+
+export interface ChatMsg {
+  key: string;
+  text: string;
+  from: "user" | "agent";
+  timestamp: number;
+  read: boolean;
+}
+
+/** Listen to all messages for a visitor in real time. */
+export const subscribeToChatMessages = (
+  visitorId: string,
+  callback: (messages: ChatMsg[]) => void,
+): (() => void) => {
+  const msgRef = ref(database, `chats/${visitorId}/messages`);
+  const unsub = onValue(msgRef, (snap) => {
+    const data = snap.val() as Record<string, Omit<ChatMsg, "key">> | null;
+    if (!data) { callback([]); return; }
+    const msgs: ChatMsg[] = Object.entries(data)
+      .map(([key, m]) => ({ key, ...m }))
+      .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+    callback(msgs);
+  });
+  return unsub;
+};
+
+/** Send an agent reply from the dashboard. */
+export const sendAgentMessage = async (
+  visitorId: string,
+  text: string,
+): Promise<void> => {
+  const ts = Date.now();
+  await push(ref(database, `chats/${visitorId}/messages`), {
+    text,
+    from: "agent",
+    timestamp: ts,
+    read: true,
+  });
+  await set(ref(database, `chats/${visitorId}/meta`), {
+    lastMessage: text,
+    lastMessageAt: ts,
+    unread: false,
+    visitorId,
+  });
+};
+
+/** Mark all messages in a chat as read (clears unread flag in meta). */
+export const markChatRead = async (visitorId: string): Promise<void> => {
+  await set(ref(database, `chats/${visitorId}/meta/unread`), false);
+};
+
+/** Subscribe to ALL chat metas to detect new messages across all visitors. */
+export const subscribeToAllChatMeta = (
+  callback: (metas: Record<string, { unread: boolean; lastMessage: string; lastMessageAt: number; visitorId: string }>) => void,
+): (() => void) => {
+  const metaRef = ref(database, "chats");
+  const unsub = onValue(metaRef, (snap) => {
+    const data = snap.val() as Record<string, any> | null;
+    if (!data) { callback({}); return; }
+    const result: Record<string, any> = {};
+    for (const [id, val] of Object.entries(data)) {
+      if (val?.meta) result[id] = val.meta;
+    }
+    callback(result);
+  });
+  return unsub;
+};
