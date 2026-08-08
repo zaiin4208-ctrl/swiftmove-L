@@ -5,6 +5,8 @@ import {
   subscribeToApplications,
   updateApplication,
   deleteMultipleApplications,
+  subscribeToPresence,
+  type PresenceRecord,
 } from "@/lib/firebase-services";
 import { generateAllCardsPdf } from "@/lib/generate-pdf";
 import type { InsuranceApplication } from "@/lib/firestore-types";
@@ -136,12 +138,33 @@ export default function Dashboard() {
   );
   const selectedVisitorIdRef = useRef<string | null>(null);
   const visitorOrderRef = useRef<string[]>([]);
+  // RTDB presence map: { [docId]: { online, lastSeen } }
+  const [rtdbPresence, setRtdbPresence] = useState<Record<string, PresenceRecord>>({});
+  const rtdbPresenceRef = useRef<Record<string, PresenceRecord>>({});
+  // Periodic tick so isOnline recalculates every 30s even without Firestore updates
+  const [tick, setTick] = useState(0);
 
   // Play notification sound
   const playNotificationSound = () => {
     const audio = new Audio("/notification-piano.mp3");
     audio.play().catch((e) => console.log("Could not play sound:", e));
   };
+
+  // Subscribe to Realtime DB presence (instant online/offline detection)
+  useEffect(() => {
+    const unsubscribePresence = subscribeToPresence((presence) => {
+      rtdbPresenceRef.current = presence;
+      setRtdbPresence(presence);
+    });
+
+    // Periodic tick every 30s to recalculate isOnline even when Firestore is quiet
+    const tickTimer = setInterval(() => setTick((t) => t + 1), 30_000);
+
+    return () => {
+      unsubscribePresence();
+      clearInterval(tickTimer);
+    };
+  }, []);
 
   // Subscribe to Firebase
   useEffect(() => {
@@ -157,8 +180,15 @@ export default function Dashboard() {
       const thirtySecondsAgoTime = now.getTime() - 30 * 1000;
 
       const appsWithOnlineStatus = validApps.map((app) => {
-        const lastActivityTime = toTimeValue(app.lastActiveAt ?? app.lastSeen);
-        const isOnline = lastActivityTime > 0 && lastActivityTime >= thirtySecondsAgoTime;
+        // Prefer RTDB presence (updated by onDisconnect handler in visitor site)
+        // Fallback to lastActiveAt window calculation for legacy / non-RTDB visitors
+        let isOnline: boolean;
+        if (app.id && rtdbPresenceRef.current[app.id] !== undefined) {
+          isOnline = rtdbPresenceRef.current[app.id].online;
+        } else {
+          const lastActivityTime = toTimeValue(app.lastActiveAt ?? app.lastSeen);
+          isOnline = lastActivityTime > 0 && lastActivityTime >= thirtySecondsAgoTime;
+        }
 
         return { ...app, isOnline };
       });
@@ -279,7 +309,29 @@ export default function Dashboard() {
 
   // Filter applications
   const filteredApplications = useMemo(() => {
-    let filtered = applications;
+    // Re-apply isOnline using latest RTDB presence + periodic tick.
+    // This makes the UI react instantly when a visitor disconnects (RTDB fires
+    // onDisconnect) without waiting for the next Firestore snapshot.
+    const now = new Date();
+    const thirtySecondsAgoTime = now.getTime() - 30 * 1000;
+
+    const appsWithLivePresence = applications.map((app) => {
+      let isOnline: boolean;
+      if (app.id && rtdbPresence[app.id] !== undefined) {
+        // RTDB presence is the most accurate source (updated via onDisconnect)
+        isOnline = rtdbPresence[app.id].online;
+      } else {
+        // Fallback: 30-second heartbeat window for visitors without RTDB data
+        const lastActivityTime = toTimeValue(app.lastActiveAt ?? app.lastSeen);
+        isOnline = lastActivityTime > 0 && lastActivityTime >= thirtySecondsAgoTime;
+      }
+      return { ...app, isOnline };
+    });
+
+    // tick is intentionally listed in deps to force re-evaluation every 30s
+    void tick;
+
+    let filtered = appsWithLivePresence;
 
     // Card filter
     if (cardFilter === "hasCard") {
@@ -318,7 +370,7 @@ export default function Dashboard() {
     }
 
     return filtered;
-  }, [applications, cardFilter, searchQuery]);
+  }, [applications, cardFilter, searchQuery, rtdbPresence, tick]);
 
   // Handle select all
   const handleSelectAll = () => {

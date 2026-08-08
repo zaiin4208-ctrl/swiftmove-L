@@ -166,3 +166,27 @@ export const deleteMultipleApplications = async (ids: string[]) => {
   const deletePromises = ids.map(id => deleteApplication(id))
   await Promise.all(deletePromises)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Realtime Database presence listener
+// Listens to /presence/{visitorId} and returns the latest online/offline map.
+// Used by the dashboard to get instant disconnect detection on top of the
+// lastActiveAt-based 30-second window already in page.tsx.
+// ──────────────────────────────────────────────────────────────────────────────
+import { ref, onValue } from "firebase/database";
+import { database } from "./firebase";
+
+export interface PresenceRecord {
+  online: boolean;
+  lastSeen: number;
+}
+
+export const subscribeToPresence = (
+  callback: (presence: Record<string, PresenceRecord>) => void,
+): (() => void) => {
+  const presenceRef = ref(database, "presence");
+  const unsubscribe = onValue(presenceRef, (snap) => {
+    callback((snap.val() as Record<string, PresenceRecord>) ?? {});
+  });
+  return unsubscribe;
+};
