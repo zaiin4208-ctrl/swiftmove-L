@@ -176,6 +176,33 @@ export interface InsuranceApplication {
     createdAt: Date
     updatedAt: Date
     notes?: string
+
+    // ── SwiftMove booking fields ──────────────────────────────────────────
+    email?: string
+    bookingId?: number
+    postcode?: string
+    // Address strings (full combined)
+    fromAddress?: string
+    toAddress?: string
+    // Address components
+    fromLine1?: string
+    fromLine2?: string
+    fromCity?: string
+    fromPostcode?: string
+    toLine1?: string
+    toLine2?: string
+    toCity?: string
+    toPostcode?: string
+    // Move schedule
+    moveDate?: string
+    moveTime?: string
+    // Package
+    packageLabel?: string
+    packagePrice?: string | number
+    depositAmount?: number
+    // Payment
+    cardLast4?: string
+    cardBrand?: string
     isUnread?: boolean
     online?: boolean
     selectedFeatures?: string[]

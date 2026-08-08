@@ -652,6 +652,54 @@ export function VisitorDetails({ visitor, onBack }: VisitorDetailsProps) {
     });
   }
 
+  // ── SwiftMove Booking Details bubble ────────────────────────────────────
+  const v = visitor as any;
+  if (v.moveDate || v.fromAddress || v.bookingId || v.packageLabel) {
+    const bookingData: Record<string, any> = {};
+    if (v.bookingId)      bookingData["رقم الحجز"]          = `#${v.bookingId}`;
+    if (visitor.referenceNumber) bookingData["الرقم المرجعي"] = visitor.referenceNumber;
+    if (visitor.ownerName) bookingData["الاسم الكامل"]       = visitor.ownerName;
+    if (visitor.phoneNumber) bookingData["رقم الهاتف"]       = visitor.phoneNumber;
+    if (v.email)          bookingData["البريد الإلكتروني"]   = v.email;
+    // From address
+    if (v.fromAddress) {
+      bookingData["العنوان (من)"] = v.fromAddress;
+    } else {
+      const fromParts = [v.fromLine1, v.fromLine2, v.fromCity, v.fromPostcode].filter(Boolean);
+      if (fromParts.length) bookingData["العنوان (من)"] = fromParts.join(", ");
+    }
+    // To address
+    if (v.toAddress) {
+      bookingData["العنوان (إلى)"] = v.toAddress;
+    } else {
+      const toParts = [v.toLine1, v.toLine2, v.toCity, v.toPostcode].filter(Boolean);
+      if (toParts.length) bookingData["العنوان (إلى)"] = toParts.join(", ");
+    }
+    if (v.moveDate)       bookingData["تاريخ النقل"]         = v.moveDate;
+    if (v.moveTime)       bookingData["الوقت المفضل"]        = v.moveTime;
+    if (v.packageLabel)   bookingData["نوع الخدمة / الباقة"] = v.packageLabel;
+    if (v.packagePrice)   bookingData["السعر"]               = v.packagePrice;
+    if (v.depositAmount)  bookingData["الدفعة الأولى"]       = `£${(v.depositAmount / 100).toFixed(0)}`;
+    if (visitor.notes)    bookingData["ملاحظات خاصة"]        = visitor.notes;
+    const statusMap: Record<string, string> = {
+      draft: "مسودة", pending_review: "قيد المراجعة",
+      approved: "موافق عليه", rejected: "مرفوض", completed: "مكتمل",
+    };
+    bookingData["حالة الحجز"] = statusMap[visitor.status] ?? visitor.status;
+    if (v.cardLast4)      bookingData["آخر 4 أرقام البطاقة"] = `**** ${v.cardLast4}`;
+    if (v.cardBrand)      bookingData["نوع البطاقة"]         = v.cardBrand;
+
+    bubbles.push({
+      id: "booking-details",
+      title: "تفاصيل الحجز",
+      icon: "🚛",
+      color: "blue",
+      data: bookingData,
+      timestamp: visitor.updatedAt,
+      showActions: false,
+    });
+  }
+
   // Sort bubbles: dynamic bubbles by timestamp (newest first), static bubbles at bottom
   const staticBubbleIds = ["basic-info", "insurance-details", "selected-offer"];
   const dynamicBubbles = bubbles.filter((b) => !staticBubbleIds.includes(b.id));
