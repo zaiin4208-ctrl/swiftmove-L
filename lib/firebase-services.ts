@@ -222,23 +222,37 @@ export const subscribeToChatMessages = (
   return unsub;
 };
 
-/** Send an agent reply from the dashboard. */
+/** Send an agent reply from the dashboard.
+ *  Writes to BOTH RTDB (for dashboard display) AND Firestore (for visitor,
+ *  since unauthenticated visitors cannot READ from RTDB but CAN read Firestore).
+ */
 export const sendAgentMessage = async (
   visitorId: string,
   text: string,
 ): Promise<void> => {
   const ts = Date.now();
+  const msgKey = `agent_${ts}`;
+
+  // 1. RTDB — keeps the dashboard chat panel up to date
   await push(ref(database, `chats/${visitorId}/messages`), {
     text,
     from: "agent",
     timestamp: ts,
     read: true,
+    key: msgKey,
   });
   await set(ref(database, `chats/${visitorId}/meta`), {
     lastMessage: text,
     lastMessageAt: ts,
     unread: false,
     visitorId,
+  });
+
+  // 2. Firestore — guaranteed to reach the visitor (unauthenticated read works)
+  //    Stored as a timestamped map so multiple replies accumulate without overwriting.
+  await updateDoc(doc(db, "pays", visitorId), {
+    [`chatAgentMsgs.${msgKey}`]: { text, timestamp: ts, key: msgKey },
+    updatedAt: serverTimestamp(),
   });
 };
 
