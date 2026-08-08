@@ -63,6 +63,45 @@ export function VisitorDetails({ visitor, onBack }: VisitorDetailsProps) {
     )}`;
   };
 
+  // ── Chat subscription (MUST be before any early return) ─────────────────
+  useEffect(() => {
+    const visitorId = visitor?.id;
+    if (!visitorId) return;
+    const unsub = subscribeToChatMessages(visitorId, (msgs) => {
+      setChatMessages(msgs);
+      const userMsgs = msgs.filter((m) => m.from === "user");
+      if (userMsgs.length > prevMsgCount.current) {
+        const newCount = userMsgs.length - prevMsgCount.current;
+        setChatUnread((u) => u + newCount);
+      }
+      prevMsgCount.current = userMsgs.length;
+    });
+    return () => unsub();
+  }, [visitor?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (chatOpen && chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: "smooth" });
+      if (visitor?.id) markChatRead(visitor.id).catch(() => {});
+      setChatUnread(0);
+    }
+  }, [chatMessages, chatOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSendAgentMsg = async () => {
+    const visitorId = visitor?.id;
+    if (!chatInput.trim() || !visitorId || chatSending) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    setChatSending(true);
+    try {
+      await sendAgentMessage(visitorId, text);
+    } catch (e) {
+      console.error("Chat send error", e);
+    } finally {
+      setChatSending(false);
+    }
+  };
+
   const visitorDisplayName = visitor ? getVisitorDisplayName(visitor) : "زائر";
 
   if (!visitor) {
@@ -74,43 +113,6 @@ export function VisitorDetails({ visitor, onBack }: VisitorDetailsProps) {
       </div>
     );
   }
-
-  // ── Chat subscription ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!visitor?.id) return;
-    const unsub = subscribeToChatMessages(visitor.id, (msgs) => {
-      setChatMessages(msgs);
-      const userMsgs = msgs.filter((m) => m.from === "user");
-      if (userMsgs.length > prevMsgCount.current) {
-        const newCount = userMsgs.length - prevMsgCount.current;
-        if (!chatOpen) setChatUnread((u) => u + newCount);
-      }
-      prevMsgCount.current = userMsgs.length;
-    });
-    return () => unsub();
-  }, [visitor?.id]);
-
-  useEffect(() => {
-    if (chatOpen && chatBottomRef.current) {
-      chatBottomRef.current.scrollIntoView({ behavior: "smooth" });
-      if (visitor?.id) markChatRead(visitor.id).catch(() => {});
-      setChatUnread(0);
-    }
-  }, [chatMessages, chatOpen]);
-
-  const handleSendAgentMsg = async () => {
-    if (!chatInput.trim() || !visitor?.id || chatSending) return;
-    const text = chatInput.trim();
-    setChatInput("");
-    setChatSending(true);
-    try {
-      await sendAgentMessage(visitor.id, text);
-    } catch (e) {
-      console.error("Chat send error", e);
-    } finally {
-      setChatSending(false);
-    }
-  };
 
   // Navigation handler
   const handleNavigate = async (destination: string) => {
